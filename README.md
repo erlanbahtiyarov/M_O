@@ -48,9 +48,11 @@ voice-pc gui
 
 можно обучить локальную нейросеть восстановления команд.
 
+### Вариант 1. Базовый корпус из 97 записей
+
 1. Положить ровно `97` голосовых записей в `data/audio_commands/`.
 
-2. Создать JSONL из этих `97` записей:
+2. Создать JSONL из этих записей:
 
 ```bash
 python scripts/prepare_voice_command_dataset.py
@@ -61,17 +63,37 @@ python scripts/prepare_voice_command_dataset.py
 4. Проверить датасет:
 
 ```bash
-python scripts/validate_voice_command_dataset.py
+python scripts/validate_voice_command_dataset.py --dataset data/voice_commands_97.jsonl --expected-count 97
 ```
 
-5. Обучить модель:
+### Вариант 2. Приобретённый корпус из 86 записей
+
+1. Подготовить нормализованный черновик recovery-датасета из `data/dataset_curated/dataset_manifest.jsonl`:
+
+```bash
+python scripts/prepare_curated_recovery_dataset.py
+```
+
+2. Если ASR уже заполнил транскрипты, но нужно только проверить структуру черновика:
+
+```bash
+python scripts/validate_voice_command_dataset.py --allow-draft
+```
+
+3. После ревью и корректировки `text`, `intent` и `canonical_text` проверить финальный датасет:
+
+```bash
+python scripts/validate_voice_command_dataset.py --expected-count 86
+```
+
+### Обучение
 
 ```bash
 pip install -e .[dev,ml]
-python scripts/train_command_recovery.py
+python scripts/train_command_recovery.py --expected-count 86
 ```
 
-3. После этого модель будет загружаться из `models/command_recovery.pt`
+После этого модель будет загружаться из `models/command_recovery.pt`
 и автоматически использоваться перед rule-based NLU.
 
 ## Ограничения текущей итерации

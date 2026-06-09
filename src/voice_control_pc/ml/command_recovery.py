@@ -177,7 +177,7 @@ def build_canonical_texts_from_commands(commands: CommandCatalog) -> dict[str, l
 
 def load_training_rows(dataset_path: Path) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
-    with dataset_path.open("r", encoding="utf-8") as fh:
+    with dataset_path.open("r", encoding="utf-8-sig") as fh:
         for line in fh:
             line = line.strip()
             if not line:

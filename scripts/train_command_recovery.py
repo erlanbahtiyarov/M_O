@@ -12,7 +12,6 @@ SRC_DIR = PROJECT_ROOT / "src"
 if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
-from voice_control_pc.config import load_config_bundle
 from voice_control_pc.ml.command_recovery import load_training_rows, train_command_recovery_model
 
 
@@ -21,7 +20,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--dataset",
         type=Path,
-        default=PROJECT_ROOT / "data" / "voice_commands_97.jsonl",
+        default=PROJECT_ROOT / "data" / "dataset_curated" / "recovery_dataset_86.jsonl",
     )
     parser.add_argument(
         "--output",
@@ -33,7 +32,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--learning-rate", type=float, default=1e-3)
     parser.add_argument("--hidden-dim", type=int, default=256)
     parser.add_argument("--num-features", type=int, default=4096)
-    parser.add_argument("--expected-count", type=int, default=97)
+    parser.add_argument(
+        "--expected-count",
+        type=int,
+        default=None,
+        help="Optional hard check for dataset row count, e.g. 86",
+    )
     return parser
 
 
@@ -41,9 +45,8 @@ def main() -> int:
     parser = build_parser()
     args = parser.parse_args()
 
-    _config = load_config_bundle(PROJECT_ROOT)
     rows = load_training_rows(args.dataset)
-    if len(rows) != args.expected_count:
+    if args.expected_count is not None and len(rows) != args.expected_count:
         raise SystemExit(
             f"Training dataset must contain exactly {args.expected_count} rows, found {len(rows)}"
         )
