@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import time
 from collections import Counter
 from pathlib import Path
 from typing import Any
@@ -80,6 +81,35 @@ def sequence_similarity(left: str, right: str) -> float:
     if not left_tokens or not right_tokens:
         return 0.0
     return len(left_tokens & right_tokens) / len(left_tokens | right_tokens)
+
+
+def build_confusion_matrix(
+    predicted_indexes: list[int],
+    target_indexes: list[int],
+    class_count: int,
+) -> list[list[int]]:
+    matrix = [[0 for _ in range(class_count)] for _ in range(class_count)]
+    for predicted, target in zip(predicted_indexes, target_indexes):
+        matrix[target][predicted] += 1
+    return matrix
+
+
+def macro_f1_from_confusion_matrix(matrix: list[list[int]]) -> float:
+    if not matrix:
+        return 0.0
+    f1_scores: list[float] = []
+    class_count = len(matrix)
+    for index in range(class_count):
+        true_positive = matrix[index][index]
+        false_positive = sum(matrix[row][index] for row in range(class_count) if row != index)
+        false_negative = sum(matrix[index][col] for col in range(class_count) if col != index)
+        precision = true_positive / max(true_positive + false_positive, 1)
+        recall = true_positive / max(true_positive + false_negative, 1)
+        if precision + recall == 0:
+            f1_scores.append(0.0)
+            continue
+        f1_scores.append((2 * precision * recall) / (precision + recall))
+    return sum(f1_scores) / max(len(f1_scores), 1)
 
 
 class NeuralCommandRecovery:
@@ -197,12 +227,21 @@ def train_command_recovery_model(
     epochs: int = 25,
     batch_size: int = 32,
     learning_rate: float = 1e-3,
+    seed: int = 42,
 ) -> dict[str, Any]:
     torch, nn = _require_torch()
+    started_at = time.perf_counter()
+    torch.manual_seed(seed)
 
     filtered_rows = [row for row in rows if row.get("intent")]
     if not filtered_rows:
         raise ValueError("Training dataset is empty after filtering")
+
+    train_rows = [row for row in filtered_rows if str(row.get("split", "")).strip() == "train"]
+    val_rows = [row for row in filtered_rows if str(row.get("split", "")).strip() == "val"]
+    test_rows = [row for row in filtered_rows if str(row.get("split", "")).strip() == "test"]
+    if not train_rows:
+        train_rows = filtered_rows
 
     intent_labels = sorted({str(row["intent"]) for row in filtered_rows})
     intent_to_index = {label: index for index, label in enumerate(intent_labels)}
@@ -222,9 +261,10 @@ def train_command_recovery_model(
         hidden_dim=hidden_dim,
         dropout=0.15,
     )
+    model_parameters = sum(parameter.numel() for parameter in model.parameters())
 
-    train_texts = [str(row["text"]) for row in filtered_rows]
-    train_targets = [intent_to_index[str(row["intent"])] for row in filtered_rows]
+    train_texts = [str(row["text"]) for row in train_rows]
+    train_targets = [intent_to_index[str(row["intent"])] for row in train_rows]
 
     features = vectorizer.transform_many(train_texts)
     targets = torch.tensor(train_targets, dtype=torch.long)
@@ -232,8 +272,46 @@ def train_command_recovery_model(
     dataset = torch.utils.data.TensorDataset(features, targets)
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=True)
 
+    def build_eval_tensors(eval_rows: list[dict[str, Any]]):
+        if not eval_rows:
+            return None, None
+        eval_texts = [str(row["text"]) for row in eval_rows]
+        eval_target_indexes = [intent_to_index[str(row["intent"])] for row in eval_rows]
+        eval_features = vectorizer.transform_many(eval_texts)
+        eval_targets = torch.tensor(eval_target_indexes, dtype=torch.long)
+        return eval_features, eval_targets
+
+    val_features, val_targets = build_eval_tensors(val_rows)
+    test_features, test_targets = build_eval_tensors(test_rows)
+
     criterion = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+
+    def evaluate_split(eval_features, eval_targets) -> dict[str, Any] | None:
+        if eval_features is None or eval_targets is None or eval_targets.numel() == 0:
+            return None
+        model.eval()
+        with torch.no_grad():
+            eval_logits = model(eval_features)
+            eval_loss = criterion(eval_logits, eval_targets)
+            eval_predicted = eval_logits.argmax(dim=1)
+            eval_correct = int((eval_predicted == eval_targets).sum().item())
+            eval_total = int(eval_targets.numel())
+        predicted_indexes = [int(item) for item in eval_predicted.tolist()]
+        target_indexes = [int(item) for item in eval_targets.tolist()]
+        confusion_matrix = build_confusion_matrix(
+            predicted_indexes=predicted_indexes,
+            target_indexes=target_indexes,
+            class_count=len(intent_labels),
+        )
+        return {
+            "loss": float(eval_loss.item()),
+            "accuracy": eval_correct / max(eval_total, 1),
+            "predicted_indexes": predicted_indexes,
+            "target_indexes": target_indexes,
+            "confusion_matrix": confusion_matrix,
+            "macro_f1": macro_f1_from_confusion_matrix(confusion_matrix),
+        }
 
     history: list[dict[str, Any]] = []
     for epoch in range(1, epochs + 1):
@@ -262,6 +340,12 @@ def train_command_recovery_model(
             }
         )
 
+        val_metrics = evaluate_split(val_features, val_targets)
+        if val_metrics is not None:
+            history[-1]["val_loss"] = round(float(val_metrics["loss"]), 4)
+            history[-1]["val_accuracy"] = round(float(val_metrics["accuracy"]), 4)
+            history[-1]["val_macro_f1"] = round(float(val_metrics["macro_f1"]), 4)
+
     output_path.parent.mkdir(parents=True, exist_ok=True)
     torch.save(
         {
@@ -276,12 +360,30 @@ def train_command_recovery_model(
         output_path,
     )
 
-    return {
+    test_metrics = evaluate_split(test_features, test_targets)
+
+    summary = {
         "rows": len(filtered_rows),
+        "train_rows": len(train_rows),
+        "val_rows": len(val_rows),
+        "test_rows": len(test_rows),
         "intent_count": len(intent_labels),
+        "intent_labels": intent_labels,
+        "model_parameters": model_parameters,
+        "epochs": epochs,
+        "batch_size": batch_size,
+        "learning_rate": learning_rate,
+        "seed": seed,
         "output_path": str(output_path),
         "history": history,
     }
+    if test_metrics is not None:
+        summary["test_loss"] = round(float(test_metrics["loss"]), 4)
+        summary["test_accuracy"] = round(float(test_metrics["accuracy"]), 4)
+        summary["test_macro_f1"] = round(float(test_metrics["macro_f1"]), 4)
+        summary["test_confusion_matrix"] = test_metrics["confusion_matrix"]
+    summary["elapsed_seconds"] = round(time.perf_counter() - started_at, 3)
+    return summary
 
 
 def maybe_load_recovery_model(

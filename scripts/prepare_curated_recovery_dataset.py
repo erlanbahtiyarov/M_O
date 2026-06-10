@@ -174,7 +174,10 @@ def main() -> int:
     needs_review = 0
 
     for row in rows:
-        audio_path = Path(str(row["audio_path"])).resolve()
+        audio_path = Path(str(row["audio_path"]))
+        if not audio_path.is_absolute():
+            audio_path = PROJECT_ROOT / audio_path
+        audio_path = audio_path.resolve()
         transcript = str(row.get("transcript_asr", "") or "").strip()
         if transcribe_file is not None and (args.force_asr or not transcript):
             transcript = transcribe_file(audio_path)
@@ -205,7 +208,7 @@ def main() -> int:
             {
                 "id": row.get("id", ""),
                 "split": row.get("split", ""),
-                "audio_path": str(audio_path),
+                "audio_path": audio_path.relative_to(PROJECT_ROOT).as_posix(),
                 "source": row.get("source", ""),
                 "voice": row.get("voice", ""),
                 "original_name": row.get("original_name", ""),

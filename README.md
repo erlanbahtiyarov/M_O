@@ -1,103 +1,110 @@
-# voice_control_pc
+# Voice Control PC
 
-Модуль дипломного проекта для локального голосового управления ПК на Windows 11.
+Локальный модуль распознавания русскоязычных голосовых команд для управления
+компьютером под Windows.
 
-В этой итерации реализовано практическое ядро:
-- пакет `voice_control_pc`
-- YAML-конфигурация
-- rule-based NLU
-- локальный neural recovery слой для битых ASR-команд
-- безопасный executor по allowlist
-- CLI для обработки текстовой команды
-- заготовки для ASR, устройств и GUI
-- базовые unit-тесты
+Проект включает:
+
+- запись и распознавание речи через Faster-Whisper;
+- rule-based NLU и безопасное выполнение разрешённых команд;
+- нейросетевое восстановление и классификацию неточно распознанных команд;
+- обучение Audio CNN по log-Mel спектрограммам;
+- подготовку и валидацию размеченного датасета;
+- построение графиков и метрик обучения.
+
+Курсовые документы, отчёты, готовые изображения, веса моделей и локальное
+виртуальное окружение в репозиторий не входят.
 
 ## Структура
 
-- `configs/default.yaml` — основные настройки приложения
-- `configs/commands.yaml` — список intents и примеры фраз
-- `configs/apps.yaml` — allowlist приложений и папок
-- `src/voice_control_pc` — исходный код
-- `tests` — тесты
-
-## Быстрый старт
-
-```bash
-python -m venv .venv
-.venv\Scripts\activate
-pip install -e .[dev]
-voice-pc command "открой браузер" --dry-run
+```text
+configs/                    конфигурации команд, приложений и ASR
+data/                       JSON/JSONL-разметка датасетов
+models/                     локальные веса моделей, исключены из Git
+scripts/                    подготовка данных, обучение и построение метрик
+src/voice_control_pc/       исходный код приложения
+tests/                      автоматические тесты
 ```
 
-## CLI
+Аудиофайлы корпуса из 86 записей находятся в:
 
-```bash
-voice-pc devices
-voice-pc transcribe path.wav
+```text
+data/dataset_curated/audio/
+```
+
+Файл разметки:
+
+```text
+data/dataset_curated/recovery_dataset_86.jsonl
+```
+
+## Установка
+
+Требуется Windows и Python 3.12 или новее.
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+pip install -e ".[dev,ml]"
+```
+
+## Проверка проекта
+
+```powershell
+pytest
+python scripts\validate_voice_command_dataset.py `
+  --dataset data\dataset_curated\recovery_dataset_86.jsonl `
+  --expected-count 86
+```
+
+## Обучение моделей
+
+Классификатор намерений по аудиосигналу:
+
+```powershell
+python scripts\train_audio_intent_classifier.py `
+  --dataset data\dataset_curated\recovery_dataset_86.jsonl `
+  --epochs 80 `
+  --batch-size 16 `
+  --augmentations 8 `
+  --seed 42
+```
+
+Модель восстановления команды по ASR-тексту:
+
+```powershell
+python scripts\train_command_recovery.py `
+  --dataset data\dataset_curated\recovery_dataset_86.jsonl `
+  --epochs 80 `
+  --batch-size 16 `
+  --seed 42
+
+python scripts\plot_command_recovery_training.py
+```
+
+Результаты обучения сохраняются локально в `models/` и `artifacts/`. Эти
+каталоги исключены из Git, поскольку содержат воспроизводимые и крупные файлы.
+
+## Запуск
+
+Проверка текстовой команды без выполнения действия:
+
+```powershell
 voice-pc command "открой папку загрузки" --dry-run
+```
+
+Распознавание команды с микрофона:
+
+```powershell
 voice-pc listen --dry-run --duration 5
+```
+
+Графический интерфейс:
+
+```powershell
 voice-pc gui
 ```
 
-## Neural Recovery
-
-Если ASR распознает команду не полностью, например:
-
-- распознано: `крой папку загрузки`
-- нужно: `открой папку загрузки`
-
-можно обучить локальную нейросеть восстановления команд.
-
-### Вариант 1. Базовый корпус из 97 записей
-
-1. Положить ровно `97` голосовых записей в `data/audio_commands/`.
-
-2. Создать JSONL из этих записей:
-
-```bash
-python scripts/prepare_voice_command_dataset.py
-```
-
-3. Разметить `intent` и `canonical_text` в `data/voice_commands_97.jsonl`.
-
-4. Проверить датасет:
-
-```bash
-python scripts/validate_voice_command_dataset.py --dataset data/voice_commands_97.jsonl --expected-count 97
-```
-
-### Вариант 2. Приобретённый корпус из 86 записей
-
-1. Подготовить нормализованный черновик recovery-датасета из `data/dataset_curated/dataset_manifest.jsonl`:
-
-```bash
-python scripts/prepare_curated_recovery_dataset.py
-```
-
-2. Если ASR уже заполнил транскрипты, но нужно только проверить структуру черновика:
-
-```bash
-python scripts/validate_voice_command_dataset.py --allow-draft
-```
-
-3. После ревью и корректировки `text`, `intent` и `canonical_text` проверить финальный датасет:
-
-```bash
-python scripts/validate_voice_command_dataset.py --expected-count 86
-```
-
-### Обучение
-
-```bash
-pip install -e .[dev,ml]
-python scripts/train_command_recovery.py --expected-count 86
-```
-
-После этого модель будет загружаться из `models/command_recovery.pt`
-и автоматически использоваться перед rule-based NLU.
-
-## Ограничения текущей итерации
-
-- `listen` и полноценный захват микрофона пока не доведены до production-состояния
-- GUI пока минимальный
-- основная рабочая часть сейчас — конфиги, NLU и безопасное исполнение команд
+Для потенциально опасных системных команд используется подтверждение
+пользователя и список разрешённых действий.

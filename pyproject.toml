@@ -25,7 +25,12 @@ dev = [
   "mypy>=1.10.0",
 ]
 ml = [
+  "av>=14.0.0",
+  "matplotlib>=3.9.0",
+  "numpy>=2.0.0",
   "torch>=2.3.0",
+  "torchaudio>=2.3.0",
+  "Pillow>=10.0.0",
 ]
 
 [project.scripts]

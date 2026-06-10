@@ -27,11 +27,17 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         default=PROJECT_ROOT / "models" / "command_recovery.pt",
     )
+    parser.add_argument(
+        "--summary-out",
+        type=Path,
+        default=PROJECT_ROOT / "artifacts" / "training" / "command_recovery_summary.json",
+    )
     parser.add_argument("--epochs", type=int, default=25)
     parser.add_argument("--batch-size", type=int, default=32)
     parser.add_argument("--learning-rate", type=float, default=1e-3)
     parser.add_argument("--hidden-dim", type=int, default=256)
     parser.add_argument("--num-features", type=int, default=4096)
+    parser.add_argument("--seed", type=int, default=42)
     parser.add_argument(
         "--expected-count",
         type=int,
@@ -72,6 +78,12 @@ def main() -> int:
         epochs=args.epochs,
         batch_size=args.batch_size,
         learning_rate=args.learning_rate,
+        seed=args.seed,
+    )
+    args.summary_out.parent.mkdir(parents=True, exist_ok=True)
+    args.summary_out.write_text(
+        json.dumps(summary, ensure_ascii=False, indent=2),
+        encoding="utf-8",
     )
     print(json.dumps(summary, ensure_ascii=False, indent=2))
     return 0

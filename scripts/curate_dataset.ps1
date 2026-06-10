@@ -66,7 +66,7 @@ foreach ($file in $files) {
         $duplicateRows.Add([PSCustomObject]@{
             duplicate_id = "dup_{0:d4}" -f $dupIndex
             original_name = $file.Name
-            duplicate_path = [System.IO.Path]::GetFullPath($dupPath)
+            duplicate_path = "data/dataset_curated/duplicates/$($file.Name)"
             hash = $hash
             duplicate_of = $seenHashes[$hash].id
             source = $meta.source
@@ -84,7 +84,7 @@ foreach ($file in $files) {
     $row = [PSCustomObject]@{
         id = "cmd_{0:d4}" -f $index
         split = ""
-        audio_path = [System.IO.Path]::GetFullPath($newPath)
+        audio_path = "data/dataset_curated/audio/$newName"
         original_name = $file.Name
         source = $meta.source
         voice = $meta.voice

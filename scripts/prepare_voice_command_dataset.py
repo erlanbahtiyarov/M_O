@@ -67,7 +67,7 @@ def main() -> int:
 
         rows.append(
             {
-                "audio_path": str(audio_path.resolve()),
+                "audio_path": audio_path.resolve().relative_to(PROJECT_ROOT).as_posix(),
                 "text": transcript,
                 "intent": "",
                 "canonical_text": "",

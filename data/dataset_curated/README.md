@@ -1,30 +1,16 @@
-# Curated Dataset
+# Размеченный аудиодатасет
 
-Эта папка содержит нормализованную версию исходного корпуса из `G:\Copiya\dataset`.
+Каталог содержит метаданные корпуса из 86 русскоязычных голосовых команд.
 
-Структура:
-- `audio/` — уникальные аудиофайлы с нормализованными именами `cmd_0001.mp3`, ...
-- `duplicates/` — вынесенные дубликаты
-- `dataset_manifest.jsonl` — основной манифест для разметки и обучения
-- `dataset_manifest.csv` — тот же манифест в табличном виде
-- `duplicates_manifest.jsonl` — список дублей
-- `summary.json` — краткая сводка по корпусу
+```text
+audio/                       MP3-файлы корпуса
+recovery_dataset_86.jsonl    готовая разметка для обучения
+dataset_manifest.jsonl       исходный манифест корпуса
+dataset_manifest.csv         табличная версия исходного манифеста
+duplicates_manifest.jsonl    сведения о найденных дубликатах
+summary.json                 сводная информация о корпусе
+```
 
-Поля манифеста:
-- `id`
-- `split`
-- `audio_path`
-- `original_name`
-- `source`
-- `voice`
-- `language`
-- `transcript_asr`
-- `text`
-- `intent`
-- `canonical_text`
-- `hash`
-- `duration`
-
-Следующий шаг:
-- заполнить `transcript_asr` или `text`
-- затем разметить `intent` и `canonical_text`
+Аудиофайлы имеют имена `cmd_0001.mp3` — `cmd_0086.mp3`. Пути в
+`recovery_dataset_86.jsonl` являются относительными, поэтому датасет можно
+перенести на другой компьютер без изменения разметки.

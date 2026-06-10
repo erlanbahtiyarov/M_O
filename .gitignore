@@ -5,13 +5,19 @@ __pycache__/
 
 logs/
 artifacts/
+generated_media/
 models/*
 !models/.gitkeep
 
 data/audio_commands/
-data/dataset_curated/audio/
 data/dataset_curated/duplicates/
 data/voice_commands_97.jsonl
+data/dataset_curated/*.backup*.jsonl
+
+# Coursework/report materials are kept outside the source repository.
+*.doc
+*.docx
+*.pdf
 
 .pytest_cache/
 .mypy_cache/
